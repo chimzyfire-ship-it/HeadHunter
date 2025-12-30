@@ -1,15 +1,6 @@
 import { NextResponse } from "next/server";
 // @ts-ignore
 import * as pdfLib from "pdf-parse";
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb',
-    },
-  },
-};
-
 // --- HELPER: THE DEEP SEARCH ---
 // This function digs through the imported object to find the actual function
 function findPdfFunction(library: any): any {
