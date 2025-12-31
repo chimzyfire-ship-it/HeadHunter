@@ -1,5 +1,5 @@
-import { UserButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 "use client";
+import { UserButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import { useState, useEffect, useRef } from 'react';
 import { Crosshair, Globe, ArrowRight, Zap, ShieldAlert, Radio, ScanEye, UserCircle, Save, FileText, UploadCloud, MapPin, Clock, PenTool, Copy, X, Mail, Briefcase, ChevronDown, CheckCircle, Trophy, Ban, RefreshCw, BrainCircuit, Target, Terminal, Flame } from 'lucide-react';
 
