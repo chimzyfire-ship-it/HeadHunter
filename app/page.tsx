@@ -1,5 +1,5 @@
 "use client";
-import { UserButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { UserButton, SignInButton, SignedIn, SignedOut, useUser, useClerk } from "@clerk/nextjs";
 import { useState, useEffect, useRef } from 'react';
 import { Crosshair, Globe, ArrowRight, Zap, ShieldAlert, Radio, ScanEye, UserCircle, Save, FileText, UploadCloud, MapPin, Clock, PenTool, Copy, X, Mail, Briefcase, ChevronDown, CheckCircle, Trophy, Ban, RefreshCw, BrainCircuit, Target, Terminal, Flame } from 'lucide-react';
 
@@ -36,9 +36,6 @@ const GLOBAL_STYLES = `
   }
   .text-glow {
     text-shadow: 0 0 30px rgba(34, 197, 94, 0.6);
-  }
-  .clip-fix {
-    padding-right: 0.2em; 
   }
   body {
     cursor: crosshair;
@@ -98,6 +95,10 @@ interface InterviewBriefing {
 }
 
 export default function Home() {
+  const { isSignedIn, user } = useUser();
+  const { openSignIn } = useClerk(); // Hook to force login modal
+  
+  const [showPaywall, setShowPaywall] = useState(false);
   const [activeTab, setActiveTab] = useState<'SEARCH' | 'MISSIONS'>('SEARCH');
   const [query, setQuery] = useState('');
   const [location, setLocation] = useState('');
@@ -107,8 +108,8 @@ export default function Home() {
   const [loadingMore, setLoadingMore] = useState(false);
   
   // Batch Analysis State
-  const [analyzing, setAnalyzing] = useState<string | null>(null); // Still used for UI loading states
-  const [autoAnalyzing, setAutoAnalyzing] = useState(false); // New flag for batch process
+  const [analyzing, setAnalyzing] = useState<string | null>(null); 
+  const [autoAnalyzing, setAutoAnalyzing] = useState(false); 
   
   const [writing, setWriting] = useState<string | null>(null);
   const [analysisResults, setAnalysisResults] = useState<Record<string, Analysis>>({});
@@ -216,45 +217,76 @@ export default function Home() {
 
   // --- ANALYSIS ENGINE ---
   const analyzeTarget = async (jobId: string, description: string) => {
-    if (!userResume) return; // Silent return for batch mode
+    if (!userResume) return; 
     
     setAnalyzing(jobId);
     try {
-      const response = await fetch('/api/analyze', { method: 'POST', body: JSON.stringify({ jobDescription: description, userProfile: userResume }), });
+      const response = await fetch('/api/analyze', { 
+        method: 'POST', 
+        body: JSON.stringify({ 
+           jobDescription: description, 
+           userProfile: userResume, 
+           // NOTE: We don't deduct credits here, only on SEARCH to be fair
+           type: 'ANALYSIS' 
+        }), 
+      });
       const data = await response.json();
       setAnalysisResults(prev => ({ ...prev, [jobId]: data }));
     } catch (err) { console.error("Analysis Failed", err); } finally { setAnalyzing(null); }
   };
 
-  // --- NEW: BATCH RECONNAISSANCE ---
-  // Triggers analysis for the top 3 jobs automatically if resume is present
   const runBatchRecon = async (newJobs: Job[]) => {
     if (!userResume || newJobs.length === 0) return;
-    
     setAutoAnalyzing(true);
-    // Take top 3 jobs
     const targets = newJobs.slice(0, 3);
-    
     for (const job of targets) {
-        // Sequential analysis to avoid hitting rate limits
         await analyzeTarget(job.job_id, job.job_description);
     }
     setAutoAnalyzing(false);
   };
 
+  // --- MAIN DEPLOY ENGINE (WITH GATES & PAYWALL) ---
   const executeSearch = async (isLoadMore = false) => {
-    if (!query) return;
+    // 1. GATEKEEPER: Check Login
+    if (!isSignedIn) {
+      openSignIn(); 
+      return;
+    }
+
+    if (!query) {
+      setError('// TARGET PARAMETERS MISSING');
+      return;
+    }
+
     if (isLoadMore) setLoadingMore(true);
     else { setLoading(true); setJobs([]); setPage(1); }
     setError('');
     
-    const RAPID_KEY = process.env.NEXT_PUBLIC_RAPID_API_KEY || '';
-    const currentPage = isLoadMore ? page + 1 : 1;
-    
     try {
+      // 2. CHECK CREDITS (Hit backend before Searching)
+      const creditCheck = await fetch('/api/analyze', {
+         method: 'POST',
+         body: JSON.stringify({ 
+             type: 'CREDIT_CHECK', 
+             userEmail: user?.primaryEmailAddress?.emailAddress 
+         }) 
+      });
+
+      if (creditCheck.status === 402) {
+         setLoading(false);
+         setLoadingMore(false);
+         setShowPaywall(true); // <--- SHOW PAYWALL
+         return;
+      }
+
+      // 3. IF CREDITS OK -> EXECUTE SEARCH
+      const RAPID_KEY = process.env.NEXT_PUBLIC_RAPID_API_KEY || '';
+      const currentPage = isLoadMore ? page + 1 : 1;
       const fullQuery = location ? `${query} in ${location}` : `${query} Remote`; 
+      
       const url = `https://jsearch.p.rapidapi.com/search?query=${fullQuery}&page=${currentPage}&num_pages=1&date_posted=month`;
       const options = { method: 'GET', headers: { 'X-RapidAPI-Key': RAPID_KEY, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' } };
+      
       const response = await fetch(url, options);
       const result = await response.json();
       
@@ -262,14 +294,21 @@ export default function Home() {
         if (isLoadMore) { 
             setJobs(prev => [...prev, ...result.data]); 
             setPage(currentPage);
-            // Optional: Run batch recon on new items too? Maybe too expensive.
         } else { 
             setJobs(result.data);
-            // TRIGGER BATCH RECON
             runBatchRecon(result.data);
         }
-      } else { if (!isLoadMore) setError('// TARGET NOT FOUND: Try expanding your search terms.'); }
-    } catch (err) { setError('// NETWORK FAILURE: Connection Refused.'); } finally { setLoading(false); setLoadingMore(false); }
+      } else { 
+        if (!isLoadMore) setError('// TARGET NOT FOUND: Try expanding your search terms.'); 
+      }
+
+    } catch (err) { 
+       console.error(err);
+       setError('// NETWORK FAILURE: Connection Refused.'); 
+    } finally { 
+       setLoading(false); 
+       setLoadingMore(false); 
+    }
   };
 
   const generateApplication = async (job: Job) => {
@@ -313,12 +352,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#020402] text-green-500 font-mono selection:bg-green-500 selection:text-black overflow-x-hidden cursor-crosshair" onClick={() => { setShowRoleSuggest(false); setShowLocSuggest(false); }}>
-    {/* --- LOGIN BUTTON OVERLAY START --- */}
+      {/* --- LOGIN BUTTON OVERLAY START --- */}
       <div className="fixed top-5 right-5 z-50 flex items-center gap-4">
         <SignedOut>
           <SignInButton mode="modal">
             <button className="bg-green-600 hover:bg-green-500 text-black font-bold py-2 px-6 rounded shadow-[0_0_15px_rgba(34,197,94,0.6)] uppercase tracking-widest transition-all hover:scale-105 border border-green-400">
-              [ ACCESS TERMINAL ]
+              [ INITIALIZE ACCOUNT ]
             </button>
           </SignInButton>
         </SignedOut>
@@ -591,6 +630,47 @@ export default function Home() {
             )}
           </div>
         )}
+
+      {/* --- PAYWALL MODAL (THE WALL) --- */}
+      {showPaywall && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 animate-in zoom-in-95">
+          <div className="bg-black border border-green-500 p-8 max-w-lg w-full shadow-[0_0_50px_rgba(34,197,94,0.2)] relative">
+            <button 
+              onClick={() => setShowPaywall(false)}
+              className="absolute top-4 right-4 text-green-700 hover:text-green-400 text-xl font-bold"
+            >
+              [X]
+            </button>
+            
+            <h2 className="text-3xl font-bold text-green-500 mb-2 tracking-widest uppercase flex items-center gap-3">
+               <ShieldAlert className="w-8 h-8"/> MISSION ABORTED
+            </h2>
+            <div className="h-px w-full bg-green-900 mb-6"></div>
+
+            <p className="text-gray-300 mb-6 font-mono text-sm leading-relaxed">
+              // <span className="text-red-500">ERROR:</span> RESOURCES DEPLETED.<br/>
+              Your free trial intelligence credits have been exhausted. To continue accessing the global job network, high-level clearance is required.
+            </p>
+            
+            <div className="border border-green-500/30 p-6 mb-8 bg-green-900/10 text-center relative overflow-hidden group">
+              <div className="absolute inset-0 bg-green-500/5 group-hover:bg-green-500/10 transition-colors"></div>
+              <div className="relative z-10">
+                 <div className="text-sm font-bold text-green-400 uppercase tracking-widest mb-2">PRO OPERATOR LICENSE</div>
+                 <div className="text-4xl font-black text-white mb-2">$15</div>
+                 <div className="text-xs text-green-600 font-mono">ONE-TIME PAYMENT • NO SUBSCRIPTION</div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => window.location.href = "https://buy.stripe.com/test_aFa5kx5S1c6s6kedsnefC00"}
+              className="w-full bg-green-600 hover:bg-green-500 text-black font-black py-4 rounded uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(34,197,94,0.6)] text-lg flex items-center justify-center gap-2"
+            >
+              <Zap className="w-5 h-5 fill-black" /> UPGRADE CLEARANCE
+            </button>
+          </div>
+        </div>
+      )}
+
       </div>
     </div>
   );
