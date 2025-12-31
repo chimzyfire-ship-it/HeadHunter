@@ -11,6 +11,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.36.5",
     "@google/generative-ai": "^0.24.1",
+    "@prisma/client": "^5.10.2",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",
     "pdf-parse": "^2.4.5",
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "prisma": "^5.10.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

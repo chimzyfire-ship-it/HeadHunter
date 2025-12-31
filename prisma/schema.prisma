@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique // This connects to your Login system
+  email     String   @unique
+  credits   Int      @default(3) // 🎁 This gives everyone 3 Free Credits
+  tier      String   @default("free") // "free" or "pro"
+  createdAt DateTime @default(now())
+}
