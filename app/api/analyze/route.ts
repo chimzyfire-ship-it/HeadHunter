@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { PrismaClient } from "@prisma/client";
+
 // --- 1. PRISMA DATABASE SETUP (Global Singleton) ---
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -12,7 +13,8 @@ const GOOGLE_KEY = process.env.GEMINI_API_KEY;
 export async function POST(req: Request) {
   try {
     // --- 2. AUTHENTICATION GATE ---
-    const { userId } = auth();
+    // FIXED: Added 'await' because auth() is now async
+    const { userId } = await auth();
     const user = await currentUser();
     
     if (!userId || !user) {
@@ -51,7 +53,6 @@ export async function POST(req: Request) {
     }
 
     // --- 6. HANDLE "JUST CHECKING" REQUESTS ---
-    // The frontend calls this before searching to see if it should show the paywall immediately
     if (type === 'CREDIT_CHECK') {
       return NextResponse.json({ success: true, credits: dbUser.credits });
     }
@@ -131,7 +132,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("V5 CRASH:", error);
-    // Don't deduct credits on error
     return NextResponse.json({ 
         matchScore: 0,
         keyKeywords: ["SYSTEM ERROR"],
