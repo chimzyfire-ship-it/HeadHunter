@@ -1,3 +1,4 @@
+import { UserButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 "use client";
 import { useState, useEffect, useRef } from 'react';
 import { Crosshair, Globe, ArrowRight, Zap, ShieldAlert, Radio, ScanEye, UserCircle, Save, FileText, UploadCloud, MapPin, Clock, PenTool, Copy, X, Mail, Briefcase, ChevronDown, CheckCircle, Trophy, Ban, RefreshCw, BrainCircuit, Target, Terminal, Flame } from 'lucide-react';
@@ -312,6 +313,26 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#020402] text-green-500 font-mono selection:bg-green-500 selection:text-black overflow-x-hidden cursor-crosshair" onClick={() => { setShowRoleSuggest(false); setShowLocSuggest(false); }}>
+    {/* --- LOGIN BUTTON OVERLAY START --- */}
+      <div className="fixed top-5 right-5 z-50 flex items-center gap-4">
+        <SignedOut>
+          <SignInButton mode="modal">
+            <button className="bg-green-600 hover:bg-green-500 text-black font-bold py-2 px-6 rounded shadow-[0_0_15px_rgba(34,197,94,0.6)] uppercase tracking-widest transition-all hover:scale-105 border border-green-400">
+              [ ACCESS TERMINAL ]
+            </button>
+          </SignInButton>
+        </SignedOut>
+
+        <SignedIn>
+          <div className="flex items-center gap-3">
+            <span className="text-green-500 text-xs md:text-sm font-mono animate-pulse hidden sm:block">
+              ● SYSTEM ONLINE
+            </span>
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        </SignedIn>
+      </div>
+      {/* --- LOGIN BUTTON OVERLAY END --- */}
       <style>{GLOBAL_STYLES}</style>
       
       {/* BACKGROUND */}
